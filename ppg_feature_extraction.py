@@ -38,14 +38,12 @@ def load_data(file):
     return signal
 
 def preprocess_signal(signal, sampling_rate, target_sampling_rate):
-    # Downsample to target_sampling_rate
     new_length = int(len(signal) * target_sampling_rate / sampling_rate)
-    signal = resample(signal, new_length)
-    # Bandpass filter
-    signal = np.mean(signal) - signal
-    signal = z_score(signal)
+    signal = resample(signal, new_length) # Downsample
+    signal = np.mean(signal) - signal  # Invert signal
+    signal = z_score(signal) # Z-score normalization
     b, a = butter(4, [0.5, 10], fs=target_sampling_rate, btype='band')
-    filtered_signal = filtfilt(b, a, signal)
+    filtered_signal = filtfilt(b, a, signal) # Bandpass filter
     time = np.arange(len(signal)) / target_sampling_rate
     total_time = len(signal) / target_sampling_rate
     return signal, filtered_signal, time, total_time
@@ -193,7 +191,7 @@ if page.startswith("Respiratory & Vasometric Extraction"):
         respiration_rate = len(peaks)/(segment_total_time/60)
         ppg_features['respiratory_rate (brpm)'] = round(respiration_rate, 4)
         
-        csv_path = 'data/data_davis_50hz_rr.csv'
+        csv_path = 'data\data_davis_50hz_rr.csv'
         rr_time, rr_force = load_force(csv_path)
         rr_force = rr_force - np.mean(rr_force)
         rr_peaks = find_peaks(rr_force, height=2, distance=1)[0]
