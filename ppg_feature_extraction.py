@@ -194,7 +194,7 @@ if page.startswith("Respiratory & Vasometric Extraction"):
         respiration_rate = len(peaks)/(segment_total_time/60)
         ppg_features['respiratory_rate (brpm)'] = round(respiration_rate, 4)
         
-        csv_path = 'D:\KULIAH\RuangKodingProgram\ASN\stress-detection-main\data\data_davis_50hz.csv'
+        csv_path = 'data\data_davis_50hz.csv'
         rr_time, rr_force = load_force(csv_path)
         rr_force = rr_force - np.mean(rr_force)
         rr_peaks = find_peaks(rr_force, height=2, distance=1)[0]
