@@ -142,9 +142,10 @@ if uploaded_file:
 
     st.subheader("Parameter Deteksi Puncak (HRV)")
     col1, col2, col3 = st.columns(3)
-    peak_height = col1.number_input("Peak Height", min_value=0.0, value=0.5, step=0.1, help="Ketinggian minimum puncak (lihat sumbu Y pada 'Filtered PPG Signal')")
-    peak_distance = col2.number_input("Peak Distance (samples)", min_value=1, value=20, step=1, help="Jarak minimum antar puncak (mis. 20 sampel pada 40Hz = 0.5 detik)")
-    peak_prominence = col3.number_input("Peak Prominence", min_value=0.0, value=0.5, step=0.1, help="Seberapa 'menonjol' puncak dari sinyal di sekitarnya")
+    # Persist peak detection parameters in session_state so other pages can use them
+    peak_height = col1.number_input("Peak Height", min_value=0.0, value=0.5, step=0.1, help="Ketinggian minimum puncak (lihat sumbu Y pada 'Filtered PPG Signal')", key='peak_height')
+    peak_distance = col2.number_input("Peak Distance (samples)", min_value=1, value=20, step=1, help="Jarak minimum antar puncak (mis. 20 sampel pada 40Hz = 0.5 detik)", key='peak_distance')
+    peak_prominence = col3.number_input("Peak Prominence", min_value=0.0, value=0.5, step=0.1, help="Seberapa 'menonjol' puncak dari sinyal di sekitarnya", key='peak_prominence')
 
     peak_indices = bmepy.detect_peaks(filtered_signal, height=peak_height, distance=peak_distance, prominence=peak_prominence)
     
@@ -627,8 +628,15 @@ elif page.startswith("Non-Linear Analysis"):
     if not uploaded_file:
         st.info("Upload a PPG CSV file to compute non-linear features.")
     else:
-        # Detect peaks (same parameters as Time Domain) and compute PI intervals
-        peak_indices = bmepy.detect_peaks(filtered_signal, height=0.5, distance=5, prominence=0.5)
+        # Detect peaks (use the same parameters from the main page controls)
+        ph = st.session_state.get('peak_height', 0.5)
+        pdist = st.session_state.get('peak_distance', 5)
+        pprom = st.session_state.get('peak_prominence', 0.5)
+        try:
+            pdist_int = int(pdist)
+        except Exception:
+            pdist_int = 5
+        peak_indices = bmepy.detect_peaks(filtered_signal, height=ph, distance=pdist_int, prominence=pprom)
 
         if len(peak_indices) > 1:
             pi_intervals = np.diff(time[peak_indices])
