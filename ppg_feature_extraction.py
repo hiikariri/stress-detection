@@ -127,7 +127,7 @@ rr_file = st.file_uploader('Upload ground-truth RR CSV (optional -> two columns:
 if 'ppg_features' not in st.session_state:
     # persist extracted features across Streamlit reruns/navigation
     st.session_state['ppg_features'] = {}
-# local alias for convenience (mutating this dict updates session state)
+
 ppg_features = st.session_state['ppg_features']
 pi_intervals = None     
 peak_indices = None   
@@ -142,7 +142,7 @@ if uploaded_file:
 
     st.subheader("Parameter Deteksi Puncak (HRV)")
     col1, col2, col3 = st.columns(3)
-    # Persist peak detection parameters in session_state so other pages can use them
+
     peak_height = col1.number_input("Peak Height", min_value=0.0, value=0.5, step=0.1, help="Ketinggian minimum puncak (lihat sumbu Y pada 'Filtered PPG Signal')", key='peak_height')
     peak_distance = col2.number_input("Peak Distance (samples)", min_value=1, value=20, step=1, help="Jarak minimum antar puncak (mis. 20 sampel pada 40Hz = 0.5 detik)", key='peak_distance')
     peak_prominence = col3.number_input("Peak Prominence", min_value=0.0, value=0.5, step=0.1, help="Seberapa 'menonjol' puncak dari sinyal di sekitarnya", key='peak_prominence')
@@ -836,9 +836,9 @@ elif page.startswith("Non-Linear Analysis"):
         else:
             st.write("Not enough detected beats to compute Poincaré plot (need at least 2 peaks).")
 
-elif page.startswith("Stress Detection Feature Result"):
+elif page.startswith("All Features & Export"):
     st.markdown("---")
-    st.header("Stress Detection Feature Result")
+    st.header("All Extracted Features & Export")
     st.markdown("---")
     if not ppg_features or (isinstance(ppg_features, dict) and len(ppg_features) == 0):
         st.info("No features have been extracted yet. Run analyses on the other pages first.")
@@ -891,7 +891,7 @@ elif page.startswith("Stress Detection Feature Result"):
             # keep column order
             all_features_df = all_features_df[['Category', 'Feature', 'Value']]
 
-            st.subheader('Extracted Features (categorized)')
+            st.subheader('Extracted Features Summary')
             st.dataframe(all_features_df, use_container_width=True)
 
             # Export button
