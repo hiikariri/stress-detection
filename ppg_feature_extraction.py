@@ -1,8 +1,8 @@
 import lib.dwt as dwt
 import lib.bmepy as bmepy
 import lib.time_domain as bmetm
-import lib.frequency_analysis as bmefq # Import library frekuensi
-import lib.poincare as poincare  # NEW: Import Poincaré library
+import lib.frequency_analysis as bmefq
+import lib.poincare as poincare
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -18,7 +18,6 @@ def load_force(csv_path):
             parts = line.strip().split(',')
             if len(parts) >= 2 and parts[1]:
                 try:
-                    # Try to get time from first column, force from second
                     t = float(parts[0])
                     f_val = float(parts[1])
                     time.append(t)
@@ -42,10 +41,8 @@ def load_data(file):
 
 @st.cache_data
 def preprocess_signal(signal, sampling_rate, target_sampling_rate):
-    # Downsample to target_sampling_rate
     new_length = int(len(signal) * target_sampling_rate / sampling_rate)
     signal = resample(signal, new_length)
-    # Bandpass filter
     signal = np.mean(signal) - signal
     signal = z_score(signal)
     b, a = butter(4, [0.5, 10], fs=target_sampling_rate, btype='band')
@@ -56,7 +53,6 @@ def preprocess_signal(signal, sampling_rate, target_sampling_rate):
 
 def plot_signal(time, signal, title='Signal', x_label='Time (s)', y_label='Amplitude'):
     fig = go.Figure()
-    # Support single or dual signal plotting
     if isinstance(signal, tuple) or isinstance(signal, list):
         sig1 = signal[0]
         sig2 = signal[1]
@@ -70,7 +66,6 @@ def plot_signal(time, signal, title='Signal', x_label='Time (s)', y_label='Ampli
 def plot_bar(x, y, title='Bar Plot', x_label='Index', y_label='Amplitude'):
     fig = go.Figure()
     fig.add_trace(go.Bar(x=x, y=y, name='bar'))
-    # --- PERBAIKAN DI BAWAH INI ---
     fig.update_layout(title=title, xaxis_title=x_label, yaxis_title=y_label) # Sebelumnya 'y_label'
     st.plotly_chart(fig)
 
@@ -112,31 +107,22 @@ if uploaded_file:
     plot_signal(time, processed_signal, title='Processed PPG Signal', x_label='Time (s)', y_label='Amplitude')
     plot_signal(time, filtered_signal, title='Filtered PPG Signal', x_label='Time (s)', y_label='Amplitude')
 
-    # --- KODE BARU DIMULAI DI SINI ---
     st.subheader("Parameter Deteksi Puncak (HRV)")
-
-    
     col1, col2, col3 = st.columns(3)
-    # Gunakan number_input untuk presisi. Berdasarkan sinyal Anda, 0.5 adalah awal yang baik.
     peak_height = col1.number_input("Peak Height", min_value=0.0, value=0.5, step=0.1, help="Ketinggian minimum puncak (lihat sumbu Y pada 'Filtered PPG Signal')")
     peak_distance = col2.number_input("Peak Distance (samples)", min_value=1, value=20, step=1, help="Jarak minimum antar puncak (mis. 20 sampel pada 40Hz = 0.5 detik)")
     peak_prominence = col3.number_input("Peak Prominence", min_value=0.0, value=0.5, step=0.1, help="Seberapa 'menonjol' puncak dari sinyal di sekitarnya")
-    # --- KODE BARU BERAKHIR DI SINI ---
 
-    # --- PERHITUNGAN GLOBAL HRV (DIPERBARUI) ---
     peak_indices = bmepy.detect_peaks(filtered_signal, height=peak_height, distance=peak_distance, prominence=peak_prominence)
     
     if len(peak_indices) > 1:
-        pi_intervals = np.diff(time[peak_indices]) # Interval dalam detik
+        pi_intervals = np.diff(time[peak_indices])
     else:
         st.warning("Not enough peaks detected in the signal to perform full HRV analysis. Please adjust peak parameters above.")
-    # --- AKHIR PERHITUNGAN GLOBAL ---
-
 
 if page.startswith("Respiratory & Vasometric Extraction"):
     st.markdown("---")
     st.header("Respiratory & Vasometric Extraction")
-    # st.info("Respiratory Rate and Vasometric Activity Extraction using DWT")
     st.markdown("---")
     if uploaded_file:
         # DWT Decomposition
@@ -346,8 +332,8 @@ if page.startswith("Respiratory & Vasometric Extraction"):
         plot_signal(x_axis, scale_8, title='Vasometric Activity Signal (Scale 8)', x_label='Sample Index', y_label='Amplitude')
         
         N = len(scale_8)
-        dft_result = bmepy.dft(scale_8) # Punya Kelompok
-        # fft_result = scipy.fft.fft(scale_8) # Punya Library
+        dft_result = bmepy.dft(scale_8) # from scratch
+        # fft_result = scipy.fft.fft(scale_8) # library
         
         T = N/target_sampling_rate
         freqs = np.arange(N)/T
@@ -398,16 +384,13 @@ if page.startswith("Respiratory & Vasometric Extraction"):
         data.columns = ['Feature', 'Value']
         st.dataframe(data)
 
-# --- BLOK TIME DOMAIN YANG DIPERBARUI ---
 elif page.startswith("Time Domain Analysis"):
     st.markdown("---")
     st.header("Time Domain Analysis")
     st.markdown("---")
 
-    # Cukup periksa apakah variabel global sudah dihitung
     if uploaded_file and peak_indices is not None:
         st.subheader("Filtered Signal with Detected Peaks (Local Maxima)")
-        # Plot ini sekarang akan diperbarui secara otomatis berdasarkan slider di halaman utama
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=time, y=filtered_signal, mode='lines', name='Filtered Signal'))
         fig.add_trace(go.Scatter(
@@ -426,7 +409,6 @@ elif page.startswith("Time Domain Analysis"):
         )
         st.plotly_chart(fig)
 
-        # Periksa lagi 'pi_intervals' untuk keamanan (jika hanya 1 puncak terdeteksi)
         if pi_intervals is not None:
             st.subheader("PI Intervals (seconds)")
             st.write(pi_intervals)
@@ -452,7 +434,6 @@ elif page.startswith("Time Domain Analysis"):
             st.write(f"Mean Pulse Interval: {np.mean(pi_intervals):.4f} s")
             st.write(f"Std Pulse Interval: {np.std(pi_intervals):.4f} s")
 
-            # Hitung fitur time domain
             time_domain_features = bmetm.compute_time_domain_features(pi_intervals)
             st.subheader("Time Domain Features")
             data = pd.DataFrame.from_dict(time_domain_features, orient='index', columns=['Value'])
@@ -461,7 +442,6 @@ elif page.startswith("Time Domain Analysis"):
             st.dataframe(data.style.format({"Value": "{:.4f}"}))
         
         else:
-            # Ini akan muncul jika parameter diatur sehingga hanya 0 atau 1 puncak terdeteksi
             st.error("Gagal menghitung fitur Time Domain. Hanya 1 atau 0 puncak terdeteksi. Silakan sesuaikan parameter di halaman utama.")
 
     elif uploaded_file:
@@ -469,27 +449,20 @@ elif page.startswith("Time Domain Analysis"):
     else:
         st.info("Please upload a PPG file to begin analysis.")
 
-
-# --- BLOK FREQUENCY DOMAIN (DENGAN PLOT BARU) ---
 elif page.startswith("Frequency Domain Analysis"):
     st.markdown("---")
     st.header("Frequency Domain Analysis")
     st.markdown("---")
 
-    # Periksa apakah variabel global 'pi_intervals' sudah ada
     if uploaded_file and pi_intervals is not None:
-        
-        # Panggil fungsi dari library baru Anda
         freqs, psd, freq_features = bmefq.compute_frequency_domain_features(pi_intervals, fs_interp=4)
-
         if freqs is not None and psd is not None and freq_features:
-            
             # Tentukan band untuk plotting
             vlf_band = (0.003, 0.04)
             lf_band = (0.04, 0.15)
             hf_band = (0.15, 0.4)
             
-            # --- Plot 1: PSD (Welch Plot) ---
+            # PSD (Welch Plot)
             st.subheader("HRV Power Spectral Density (PSD)")
             fig_psd = go.Figure()
             fig_psd.add_trace(go.Scatter(x=freqs, y=psd, mode='lines', name='PSD', line=dict(color='blue')))
@@ -518,11 +491,11 @@ elif page.startswith("Frequency Domain Analysis"):
                 title="Welch's Power Spectral Density",
                 xaxis_title="Frequency (Hz)",
                 yaxis_title="Power Spectral Density (ms²/Hz)",
-                xaxis_range=[0, 0.5] # Fokus pada area di bawah 0.5 Hz
+                xaxis_range=[0, 0.5] # limit under 0.5 Hz
             )
             st.plotly_chart(fig_psd)
 
-            # --- Plot 2 & 3: Bar Plot (Absolute dan Normalized) ---
+            # Bar Plot (Absolute dan Normalized)
             st.subheader("Power Band Analysis")
 
             # Ambil semua nilai fitur
@@ -532,18 +505,16 @@ elif page.startswith("Frequency Domain Analysis"):
             hf_nu = freq_features.get('HF (n.u.)')
             lf_hf_ratio = freq_features.get('LF/HF Ratio')
 
-            # Buat dua kolom
             col1, col2 = st.columns(2)
 
             with col1:
-                # Plot untuk Absolute Power (LF dan HF)
                 fig_bar_abs = go.Figure()
                 fig_bar_abs.add_trace(go.Bar(
                     x=['LF Power', 'HF Power'],
                     y=[lf_power, hf_power],
                     text=[f'{lf_power:.2f} ms²', f'{hf_power:.2f} ms²'],
                     textposition='auto',
-                    marker_color=['#FF8C00', '#DC143C'] # Oranye dan Merah
+                    marker_color=['#FF8C00', '#DC143C']
                 ))
                 fig_bar_abs.update_layout(
                     title=f'Absolute Power',
@@ -552,14 +523,14 @@ elif page.startswith("Frequency Domain Analysis"):
                 st.plotly_chart(fig_bar_abs)
 
             with col2:
-                # Plot untuk Normalized Units (LF n.u. dan HF n.u.)
+                # Plot normalized units (LF n.u. dan HF n.u.)
                 fig_bar_nu = go.Figure()
                 fig_bar_nu.add_trace(go.Bar(
                     x=['LF (n.u.)', 'HF (n.u.)'],
                     y=[lf_nu, hf_nu],
                     text=[f'{lf_nu:.1f}%', f'{hf_nu:.1f}%'],
                     textposition='auto',
-                    marker_color=['#FF8C00', '#DC143C'] # Oranye dan Merah
+                    marker_color=['#FF8C00', '#DC143C']
                 ))
                 fig_bar_nu.update_layout(
                     title=f'Normalized Power (LF/HF Ratio: {lf_hf_ratio:.2f})',
@@ -568,7 +539,7 @@ elif page.startswith("Frequency Domain Analysis"):
                 st.plotly_chart(fig_bar_nu)
 
 
-            # --- Plot 4: Tabel Fitur ---
+            # Frequency domain feature result
             st.subheader("All Frequency Domain Features")
             data = pd.DataFrame.from_dict(freq_features, orient='index', columns=['Value'])
             data = data.reset_index()
@@ -579,7 +550,6 @@ elif page.startswith("Frequency Domain Analysis"):
         st.warning("Could not perform frequency domain analysis. Check if enough peaks were detected on the main page.")
     else:
         st.info("Please upload a PPG file to begin analysis.")
-
 
 elif page.startswith("Non-Linear Analysis"):
     st.markdown("---")
@@ -594,7 +564,7 @@ elif page.startswith("Non-Linear Analysis"):
         peak_indices = bmepy.detect_peaks(filtered_signal, height=0.5, distance=5, prominence=0.5)
 
         if len(peak_indices) > 1:
-            pi_intervals = np.diff(time[peak_indices])  # in seconds
+            pi_intervals = np.diff(time[peak_indices])
             
             # Convert to ms for Poincaré analysis using library function
             rr_ms = poincare.convert_intervals_to_ms(pi_intervals, unit='seconds')
@@ -614,10 +584,7 @@ elif page.startswith("Non-Linear Analysis"):
                 ppg_features['poincare_SD2 (ms)'] = round(SD2, 4) if SD2 is not None else None
                 ppg_features['poincare_SD1/SD2_ratio'] = round(SD_ratio, 4) if SD_ratio is not None else None
 
-                # ===== POINCARÉ ANALYSIS SUMMARY BOX =====
                 st.subheader("Poincaré Analysis Summary")
-                
-                # Create columns for better layout
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
@@ -641,14 +608,9 @@ elif page.startswith("Non-Linear Analysis"):
                         help="Ratio indicates balance between short-term and long-term variability."
                     )
                 
-                # Detailed Analysis Box
                 st.markdown("---")
-                
-                # Interpretation
                 if SD_ratio is not None:
                     interpretation = poincare.interpret_poincare_ratio(SD_ratio)
-                    
-                    # Tentukan warna berdasarkan rasio
                     if SD_ratio < 0.3:
                         color = "🔴"
                         status = "Stres Tinggi / Dominasi Simpatik"
@@ -675,7 +637,6 @@ elif page.startswith("Non-Linear Analysis"):
                     
                     st.markdown("---")
                     
-                    # Kotak informasi detail tambahan
                     with st.expander("📖 Penjelasan Detail Metrik Poincaré", expanded=False):
                         st.markdown(f"""
                         ### Statistik Interval RR
@@ -724,10 +685,7 @@ elif page.startswith("Non-Linear Analysis"):
                         - Karmakar, C. K., et al. (2009). "Complex correlation measure: a novel descriptor for Poincaré plot." *Biomed Eng Online*, 8, 17.
                         """)
 
-                    # Tombol ekspor hasil
                     st.markdown("---")
-
-                    # Persiapan data ekspor
                     export_data = {
                         "Metrik": [
                             "Total Interval RR",
@@ -769,11 +727,9 @@ elif page.startswith("Non-Linear Analysis"):
                             mime="text/csv"
                         )
 
-                # ===== POINCARÉ PLOT =====
                 st.markdown("---")
                 st.subheader("Poincaré Plot Visualization")
                 
-                # Create Poincaré plot using library with tighter margins
                 try:
                     fig, ax, metrics = poincare.plot_poincare(
                         rr_ms, 
@@ -782,13 +738,12 @@ elif page.startswith("Non-Linear Analysis"):
                         figsize=(8, 8),
                         margin_factor=0.05,        # 5% margin (lebih ketat)
                         use_percentile=True,       # Gunakan percentile untuk ignore outlier
-                        percentile_range=(2, 1)   # Fokus ke 96% data di tengah
+                        percentile_range=(2, 1)    # Fokus ke 96% data di tengah
                     )
                     st.pyplot(fig)
                 except Exception as e:
                     st.error(f"Error creating Poincaré plot: {str(e)}")
 
-                # ===== EXTRACTED FEATURES TABLE =====
                 st.markdown("---")
                 st.subheader("Extracted PPG Features (including Poincaré)")
                 if ppg_features:
