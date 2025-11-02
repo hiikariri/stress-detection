@@ -80,14 +80,14 @@ def skewness(nn_intervals):
 # Convenience function to compute all features
 def compute_time_domain_features(nn_intervals):
     return {
-        'SDNN': sdnn(nn_intervals),
-        'SDANN': sdann(nn_intervals),
-        'SDNN index': sdnn_index(nn_intervals),
-        'RMSSD': rmssd(nn_intervals),
-        'SDSD': sdsd(nn_intervals),
+        'SDNN (ms)': sdnn(nn_intervals) * 1000,  # Convert to ms
+        'SDANN (ms)': sdann(nn_intervals) * 1000,
+        'SDNN index (ms)': sdnn_index(nn_intervals) * 1000,
+        'RMSSD (ms)': rmssd(nn_intervals) * 1000,
+        'SDSD (ms)': sdsd(nn_intervals) * 1000,
         'NN50': nn50(nn_intervals),
         'pNN50': pnn50(nn_intervals),
-        'Mean HR': mean_hr(nn_intervals),
+        'HR (bpm)': mean_hr(nn_intervals),
         'HTI': hti(nn_intervals),
         'TINN': tinn(nn_intervals),
         'CVNN': cvnn(nn_intervals),
