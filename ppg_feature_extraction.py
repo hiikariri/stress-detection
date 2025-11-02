@@ -11,19 +11,34 @@ from scipy.signal import butter, filtfilt, resample, find_peaks
 
 
 def load_force(csv_path):
+    """
+    Load a two-column CSV (time,force) from a path or an uploaded file-like object.
+    Accepts either a filesystem path (str) or a file-like object (Streamlit UploadedFile).
+    """
     time = []
     force = []
-    with open(csv_path, 'r') as f:
-        for line in f:
-            parts = line.strip().split(',')
-            if len(parts) >= 2 and parts[1]:
-                try:
-                    t = float(parts[0])
-                    f_val = float(parts[1])
-                    time.append(t)
-                    force.append(f_val)
-                except ValueError:
-                    continue
+    # If csv_path is a file-like (has read), read its contents
+    if hasattr(csv_path, 'read'):
+        raw = csv_path.read()
+        # raw may be bytes or str
+        if isinstance(raw, bytes):
+            raw = raw.decode('utf-8')
+        lines = raw.splitlines()
+        iterator = lines
+    else:
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            iterator = f.readlines()
+
+    for line in iterator:
+        parts = line.strip().split(',')
+        if len(parts) >= 2 and parts[1]:
+            try:
+                t = float(parts[0])
+                f_val = float(parts[1])
+                time.append(t)
+                force.append(f_val)
+            except ValueError:
+                continue
     return np.array(time), np.array(force)
 
 def z_score(signal):
@@ -50,6 +65,18 @@ def preprocess_signal(signal, sampling_rate, target_sampling_rate):
     time = np.arange(len(signal)) / target_sampling_rate
     total_time = len(signal) / target_sampling_rate
     return signal, filtered_signal, time, total_time
+
+@st.cache_data
+def cached_discrete_wavelet_transform():
+    return dwt.discrete_wavelet_transform()
+
+@st.cache_data
+def cached_dwt_freq_response(fs):
+    return dwt.dwt_freq_response(fs)
+
+@st.cache_data
+def cached_compute_dwt_bandwidths(fs):
+    return dwt.compute_dwt_bandwidths(fs)
 
 def plot_signal(time, signal, title='Signal', x_label='Time (s)', y_label='Amplitude'):
     fig = go.Figure()
@@ -84,7 +111,8 @@ with st.sidebar:
             "Respiratory & Vasometric Extraction",
             "Time Domain Analysis",
             "Frequency Domain Analysis",
-            "Non-Linear Analysis"
+            "Non-Linear Analysis",
+            "All Features & Export"
         ]
     )
     st.markdown("---")
@@ -95,6 +123,7 @@ with st.sidebar:
 uploaded_file = st.file_uploader('Upload PPG CSV file', type=['csv'])
 original_sampling_rate = st.number_input('Sampling Rate (Hz)', min_value=1, value=50)
 target_sampling_rate = st.number_input('Target Sampling Rate (Hz)', min_value=1, value=40)
+rr_file = st.file_uploader('Upload ground-truth RR CSV (optional -> two columns: time,force)', type=['csv'], key='rr_gt')
 ppg_features = {}
 pi_intervals = None     
 peak_indices = None   
@@ -131,7 +160,7 @@ if page.startswith("Respiratory & Vasometric Extraction"):
         qj = [[] for _ in range(9)]
         delay = []
 
-        h, g, qj, delay = dwt.discrete_wavelet_transform()
+        h, g, qj, delay = cached_discrete_wavelet_transform()
         plot_bar(np.arange(len(h)), h, title='h(n)', x_label='n', y_label='h(n)')
         plot_bar(np.arange(len(g)), g, title='g(n)', x_label='n', y_label='g(n)')
         for j in range(1, 9):
@@ -139,8 +168,7 @@ if page.startswith("Respiratory & Vasometric Extraction"):
 
         st.write(f'Delay values: {delay}')
 
-        Q = np.zeros((9, target_sampling_rate // 2 + 1))
-        Q = dwt.dwt_freq_response(target_sampling_rate)
+        Q = cached_dwt_freq_response(target_sampling_rate)
         fig = go.Figure()
 
         freqs = np.arange(target_sampling_rate // 2 + 1)
@@ -163,7 +191,7 @@ if page.startswith("Respiratory & Vasometric Extraction"):
         st.plotly_chart(fig, use_container_width=True)
 
         # DWT Bandwidths
-        df_bands = dwt.compute_dwt_bandwidths(target_sampling_rate)
+        df_bands = cached_compute_dwt_bandwidths(target_sampling_rate)
         st.subheader("DWT Frequency Bandwidths")
         st.dataframe(df_bands.style.format({
             "Min Frequency (Hz)": "{:.4f}",
@@ -208,45 +236,61 @@ if page.startswith("Respiratory & Vasometric Extraction"):
         peaks, threshold = bmepy.adaptive_threshold_peaks(rr_signal, window_size=20, factor=-1, distance=50)
         respiration_rate = len(peaks)/(segment_total_time/60)
         ppg_features['respiratory_rate (brpm)'] = round(respiration_rate, 4)
-        
-        csv_path = 'data/data_davis_50hz_rr.csv'
-        rr_time, rr_force = load_force(csv_path)
-        rr_force = rr_force - np.mean(rr_force)
-        rr_peaks = find_peaks(rr_force, height=2, distance=1)[0]
-        real_respiration_rate = len(rr_peaks)/(rr_time[-1]/60)
-        st.write("Ground Truth Respiration Signal")
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=rr_time,
-            y=rr_force,
-            mode='lines',
-            name='Respiration Force',
-            line=dict(color='grey', width=1, dash='dot')
-        ))
 
-        if len(rr_peaks) > 0:
-            fig.add_trace(go.Scatter(
-                x=rr_time[rr_peaks],
-                y=rr_force[rr_peaks],
-                mode='markers',
-                name=f'Detected Peaks ({len(rr_peaks)})',
-                marker=dict(
-                    color='green',
-                    size=8,
-                    symbol='circle',
-                    line=dict(width=2, color='white')
-                )
-            ))
+        real_respiration_rate = None
+        if rr_file is not None:
+            try:
+                rr_time, rr_force = load_force(rr_file)
+                if len(rr_time) > 0 and len(rr_force) > 0:
+                    rr_force = rr_force - np.mean(rr_force)
+                    rr_peaks = find_peaks(rr_force, height=2, distance=1)[0]
+                    real_respiration_rate = len(rr_peaks)/(rr_time[-1]/60) if rr_time[-1] > 0 else None
+                    st.write("Ground Truth Respiration Signal")
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=rr_time,
+                        y=rr_force,
+                        mode='lines',
+                        name='Respiration Force',
+                        line=dict(color='grey', width=1, dash='dot')
+                    ))
 
-        fig.update_layout(
-            title='Respiration Force Peak Detection',
-            xaxis_title='Time (seconds)',
-            yaxis_title='Force (N)',
-            template='plotly_white',
-            height=500,
-            showlegend=True
-        )
-        st.plotly_chart(fig)
+                    if len(rr_peaks) > 0:
+                        fig.add_trace(go.Scatter(
+                            x=rr_time[rr_peaks],
+                            y=rr_force[rr_peaks],
+                            mode='markers',
+                            name=f'Detected Peaks ({len(rr_peaks)})',
+                            marker=dict(
+                                color='green',
+                                size=8,
+                                symbol='circle',
+                                line=dict(width=2, color='white')
+                            )
+                        ))
+
+                    fig.update_layout(
+                        title='Respiration Force Peak Detection',
+                        xaxis_title='Time (seconds)',
+                        yaxis_title='Force (N)',
+                        template='plotly_white',
+                        height=500,
+                        showlegend=True
+                    )
+                    st.plotly_chart(fig)
+
+                    # show comparison of estimated vs ground truth if available
+                    if real_respiration_rate is not None:
+                        st.write(f"Estimated Respiration Rate: {respiration_rate} breaths per minute")
+                        st.write(f"Label Respiration Rate: {real_respiration_rate} breaths per minute")
+                    else:
+                        st.write(f"Estimated Respiration Rate: {respiration_rate} breaths per minute")
+                else:
+                    st.warning("Uploaded RR file seems empty or incorrectly formatted.")
+            except Exception as e:
+                st.error(f"Failed to load RR ground truth file: {e}")
+        else:
+            st.info("No ground-truth RR file uploaded.")
 
         fig = go.Figure()
         fig.add_trace(go.Scatter(
@@ -324,7 +368,10 @@ if page.startswith("Respiratory & Vasometric Extraction"):
         )
         st.plotly_chart(fig_detailed)
         st.write(f"Estimated Respiration Rate: {respiration_rate} breaths per minute")
-        st.write(f"Label Respiration Rate: {real_respiration_rate} breaths per minute")
+        if real_respiration_rate is not None:
+            st.write(f"Label Respiration Rate: {real_respiration_rate} breaths per minute")
+        else:
+            st.write(f"Label Respiration Rate: N/A")
 
         # Vasometric Activity Extraction
         st.subheader("Vasometric Activity Extraction")
@@ -440,6 +487,12 @@ elif page.startswith("Time Domain Analysis"):
             data = data.reset_index()
             data.columns = ['Feature', 'Value']
             st.dataframe(data.style.format({"Value": "{:.4f}"}))
+            # Merge time-domain features into global ppg_features (make keys unique if needed)
+            for k, v in time_domain_features.items():
+                try:
+                    ppg_features[str(k)] = float(v) if v is not None else None
+                except Exception:
+                    ppg_features[str(k)] = v
         
         else:
             st.error("Gagal menghitung fitur Time Domain. Hanya 1 atau 0 puncak terdeteksi. Silakan sesuaikan parameter di halaman utama.")
@@ -545,6 +598,12 @@ elif page.startswith("Frequency Domain Analysis"):
             data = data.reset_index()
             data.columns = ['Feature', 'Value']
             st.dataframe(data.style.format({"Value": "{:.4f}"}))
+            # Merge frequency-domain features into global ppg_features
+            for k, v in freq_features.items():
+                try:
+                    ppg_features[str(k)] = float(v) if v is not None else None
+                except Exception:
+                    ppg_features[str(k)] = v
 
     elif uploaded_file:
         st.warning("Could not perform frequency domain analysis. Check if enough peaks were detected on the main page.")
@@ -753,3 +812,36 @@ elif page.startswith("Non-Linear Analysis"):
                     st.dataframe(data, use_container_width=True)
         else:
             st.write("Not enough detected beats to compute Poincaré plot (need at least 2 peaks).")
+
+elif page.startswith("All Features & Export"):
+    st.markdown("---")
+    st.header("All Extracted Features & Export")
+    st.markdown("---")
+
+    if not ppg_features:
+        st.info("No features have been extracted yet. Run analyses on the other pages first.")
+    else:
+        # Build a dataframe from ppg_features and display
+        all_features_df = pd.DataFrame.from_dict(ppg_features, orient='index', columns=['Value'])
+        all_features_df = all_features_df.reset_index()
+        all_features_df.columns = ['Feature', 'Value']
+        # Try formatting numeric values
+        def try_float(x):
+            try:
+                return float(x)
+            except Exception:
+                return x
+
+        all_features_df['Value'] = all_features_df['Value'].apply(try_float)
+
+        st.subheader('Extracted Features')
+        st.dataframe(all_features_df, use_container_width=True)
+
+        # Export button
+        csv_data = all_features_df.to_csv(index=False)
+        st.download_button(
+            label='📥 Download All Features (CSV)',
+            data=csv_data,
+            file_name=f'all_extracted_features_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}.csv',
+            mime='text/csv'
+        )
