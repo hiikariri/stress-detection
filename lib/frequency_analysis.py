@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 import streamlit as st
 from scipy.interpolate import interp1d
 from scipy.signal import welch
