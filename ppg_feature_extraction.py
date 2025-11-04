@@ -243,6 +243,8 @@ if page.startswith("Respiratory & Vasometric Extraction"):
         peaks, threshold = bmepy.adaptive_threshold_peaks(rr_signal, window_size=20, factor=-1, distance=50)
         respiration_rate = len(peaks)/(segment_total_time/60)
         ppg_features['respiratory_rate (brpm)'] = round(respiration_rate, 4)
+        # persist top-level respiratory feature to session state so All Features page sees it
+        st.session_state['ppg_features'] = ppg_features
 
         real_respiration_rate = None
         if rr_file is not None:
@@ -399,6 +401,8 @@ if page.startswith("Respiratory & Vasometric Extraction"):
             peak_mag = mag_band[peak_idx]
             st.write(f"Highest peak magnitude in 0.04-0.15 Hz: {peak_mag:.4f} at {peak_freq:.4f} Hz")
             ppg_features['vasometric_activity (Hz)'] = round(peak_freq, 4)
+            # persist top-level vasometric feature to session state so All Features page sees it
+            st.session_state['ppg_features'] = ppg_features
         else:
             st.write("No frequency components found in 0.04-0.15 Hz range.")
             ppg_features['vasometric_activity (Hz)'] = None
