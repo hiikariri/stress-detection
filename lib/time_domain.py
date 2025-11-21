@@ -37,8 +37,11 @@ def nn50(nn_intervals, threshold=0.05):
     return np.sum(diff > threshold)
 
 def pnn50(nn_intervals, threshold=0.05):
-    """Proportion of NN50 divided by total number of intervals"""
-    return nn50(nn_intervals, threshold) / len(nn_intervals) * 100
+    """Proportion of NN50 divided by total number of successive differences"""
+    n_diffs = len(nn_intervals) - 1
+    if n_diffs == 0:
+        return 0.0
+    return nn50(nn_intervals, threshold) / n_diffs * 100
 
 def mean_hr(nn_intervals):
     """Mean heart rate (bpm) from NN intervals (seconds)"""
@@ -53,16 +56,35 @@ def hti(nn_intervals, bin_size=0.01):
     return len(nn_intervals) / np.max(counts)
 
 def tinn(nn_intervals, bin_size=0.01):
-    """TINN: Triangular interpolation of NN interval histogram (approximate)"""
+    """TINN: Triangular interpolation of NN interval histogram (HRV Task Force standard)"""
+    # Create histogram
     counts, bin_edges = np.histogram(nn_intervals, bins=np.arange(np.min(nn_intervals), np.max(nn_intervals)+bin_size, bin_size))
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    
+    # Find mode (peak)
     max_idx = np.argmax(counts)
-    left = max_idx
-    right = max_idx
-    while left > 0 and counts[left] > 0:
-        left -= 1
-    while right < len(counts)-1 and counts[right] > 0:
-        right += 1
-    return bin_edges[right] - bin_edges[left]
+    mode = bin_centers[max_idx]
+    max_count = counts[max_idx]
+    
+    # Find left intercept (N): where line from peak to left edge crosses X-axis
+    # Linear interpolation from peak going left
+    left_idx = 0
+    for i in range(max_idx, 0, -1):
+        if counts[i] == 0 or i == 0:
+            left_idx = i
+            break
+    
+    # Find right intercept (M): where line from peak to right edge crosses X-axis
+    right_idx = len(counts) - 1
+    for i in range(max_idx, len(counts)):
+        if counts[i] == 0 or i == len(counts) - 1:
+            right_idx = i
+            break
+    
+    # TINN = M - N (baseline width of the triangle)
+    tinn_value = bin_centers[right_idx] - bin_centers[left_idx]
+    
+    return tinn_value
 
 def cvnn(nn_intervals):
     """Coefficient of variation of NN intervals"""
@@ -71,7 +93,10 @@ def cvnn(nn_intervals):
 def cvsd(nn_intervals):
     """Coefficient of variation of successive differences"""
     diff = np.diff(nn_intervals)
-    return np.std(diff, ddof=1) / np.mean(nn_intervals)
+    mean_diff = np.mean(np.abs(diff))
+    if mean_diff == 0:
+        return np.nan
+    return np.std(diff, ddof=1) / mean_diff
 
 def skewness(nn_intervals):
     """Skewness of NN interval distribution"""

@@ -850,6 +850,7 @@ elif page.startswith("Time Domain Analysis"):
             data = data.reset_index()
             data.columns = ['Feature', 'Value']
             st.dataframe(data.style.format({"Value": "{:.4f}"}))
+            
             # Store time-domain features under a dedicated key in session state
             # convert numeric values to float where possible
             td = {}
@@ -859,7 +860,308 @@ elif page.startswith("Time Domain Analysis"):
                 except Exception:
                     td[str(k)] = v
             ppg_features['time_domain'] = td
-        
+            
+            # Clinical Interpretation Section
+            st.markdown("---")
+            st.subheader("Clinical Interpretation & Reference Ranges")
+            
+            # Get key metrics for interpretation
+            sdnn_val = time_domain_features.get('SDNN (ms)')
+            rmssd_val = time_domain_features.get('RMSSD (ms)')
+            pnn50_val = time_domain_features.get('pNN50 (%)')
+            
+            # Interpretation for SDNN
+            if sdnn_val is not None:
+                st.markdown("### SDNN (Standard Deviation of NN intervals)")
+                col1, col2 = st.columns([1, 2])
+                
+                with col1:
+                    st.metric("Your SDNN", f"{sdnn_val:.2f} ms")
+                
+                with col2:
+                    if sdnn_val < 32:
+                        status = "🔴 Low"
+                        color = "#ff4444"
+                    else:
+                        status = "🟢 Normal"
+                        color = "#44ff44"
+                    
+                    st.markdown(f"""
+                    <div style='padding: 15px; background-color: #1a1a1a; border-left: 5px solid {color}; border-radius: 5px;'>
+                        <p style='font-size: 16px; font-weight: bold; margin: 0;'>{status}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                st.markdown("""
+                **Reference Ranges (for healthy adults):**
+                - **< 32 ms**: Low HRV - Associated with stress, fatigue, or cardiovascular issues
+                - **32-93 ms**: Normal range - Typical for healthy adults
+                
+                **Interpretation:**
+                - High SDNN → High variation in RR intervals → Active and flexible ANS → Good health
+                - Low SDNN → Minimal variation in RR intervals → Limited ANS regulation → Stress/fatigue/disease
+                """)
+            
+            st.markdown("---")
+            
+            # Interpretation for RMSSD
+            if rmssd_val is not None:
+                st.markdown("### RMSSD (Root Mean Square of Successive Differences)")
+                col1, col2 = st.columns([1, 2])
+                
+                with col1:
+                    st.metric("Your RMSSD", f"{rmssd_val:.2f} ms")
+                
+                with col2:
+                    if rmssd_val < 19:
+                        status = "🔴 Low"
+                        color = "#ff4444"
+                    else:
+                        status = "🟢 Normal"
+                        color = "#44ff44"
+                    
+                    st.markdown(f"""
+                    <div style='padding: 15px; background-color: #1a1a1a; border-left: 5px solid {color}; border-radius: 5px;'>
+                        <p style='font-size: 16px; font-weight: bold; margin: 0;'>{status}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                st.markdown("""
+                **Reference Ranges:**
+                - **< 19 ms**: Low - Reduced parasympathetic (vagal) activity
+                - **19-75 ms**: Normal - Typical for healthy adults
+                
+                **Interpretation:**
+                - RMSSD measures short-term fluctuations very sensitive to parasympathetic activity
+                - **High RMSSD** → Large beat-to-beat variation → Parasympathetic dominance → Body relaxed, good recovery
+                - **Low RMSSD** → Small beat-to-beat variation → Sympathetic dominance or reduced parasympathetic → Body tense, stressed, fatigued
+                
+                **Stress Response:**
+                - Psychological stress (emotions, work, mental load) → Suppresses parasympathetic, increases sympathetic → RMSSD decreases
+                - Physical stress (heavy exercise, lack of sleep, illness) → Also suppresses parasympathetic → RMSSD decreases
+                - Recovery/Relaxation → Parasympathetic increases → RMSSD increases
+                """)
+            
+            st.markdown("---")
+            
+            # Interpretation for pNN50
+            if pnn50_val is not None:
+                st.markdown("### pNN50 (Percentage of successive RR intervals differing by > 50ms)")
+                col1, col2 = st.columns([1, 2])
+                
+                with col1:
+                    st.metric("Your pNN50", f"{pnn50_val:.2f} %")
+                
+                with col2:
+                    if pnn50_val < 5:
+                        status = "🔴 Low"
+                        color = "#ff4444"
+                    else:
+                        status = "🟢 Normal"
+                        color = "#44ff44"
+                    
+                    st.markdown(f"""
+                    <div style='padding: 15px; background-color: #1a1a1a; border-left: 5px solid {color}; border-radius: 5px;'>
+                        <p style='font-size: 16px; font-weight: bold; margin: 0;'>{status}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                st.markdown("""
+                **Reference Ranges:**
+                - **< 5%**: Low - Limited beat-to-beat variability
+                - **≥ 5%**: Normal - Typical for healthy adults
+                
+                **Interpretation:**
+                - pNN50 is very sensitive to **parasympathetic activity**
+                - **High pNN50** → Many successive RR intervals change >50ms → Parasympathetic dominance → Body relaxed/healthy
+                - **Low pNN50** → Few successive RR intervals change >50ms → Sympathetic dominance → Body tense/stressed
+                """)
+            
+            st.markdown("---")
+            
+            # Interpretation for NN50
+            nn50_val = time_domain_features.get('NN50')
+            if nn50_val is not None:
+                st.markdown("### NN50 (Number of successive RR intervals differing by > 50ms)")
+                col1, col2 = st.columns([1, 2])
+                
+                with col1:
+                    st.metric("Your NN50", f"{nn50_val:.0f} beats")
+                
+                with col2:
+                    if nn50_val < 74:
+                        status = "🔴 Low"
+                        color = "#ff4444"
+                    else:
+                        status = "🟢 Normal"
+                        color = "#44ff44"
+                    
+                    st.markdown(f"""
+                    <div style='padding: 15px; background-color: #1a1a1a; border-left: 5px solid {color}; border-radius: 5px;'>
+                        <p style='font-size: 16px; font-weight: bold; margin: 0;'>{status}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                st.markdown("""
+                **Reference Ranges (based on stress research):**
+                - **Relaxed state**: 83.14 ± 42.97 beats (mean ± SD)
+                - **Stressed state**: 74.20 ± 33.56 beats (significantly lower)
+                - **< 74 beats**: Low - May indicate stress or reduced parasympathetic activity
+                - **≥ 74 beats**: Normal - Typical for relaxed state
+                
+                **Interpretation:**
+                - NN50 is the absolute count of successive RR interval differences > 50ms
+                - **High NN50** → Many large beat-to-beat changes → High parasympathetic tone → Relaxed state
+                - **Low NN50** → Fewer large beat-to-beat changes → Reduced parasympathetic tone → Stress response
+                - Research shows NN50 significantly decreases under stress (p < 0.05)
+                
+                **Clinical Significance:**
+                - NN50 reflects **vagal (parasympathetic) modulation** of heart rate
+                - Stress suppresses vagal activity → NN50 decreases
+                - Higher NN50 indicates better ANS flexibility and stress resilience
+                """)
+            
+            st.markdown("---")
+            
+            # Interpretation for SDSD
+            sdsd_val = time_domain_features.get('SDSD (ms)')
+            if sdsd_val is not None:
+                st.markdown("### SDSD (Standard Deviation of Successive Differences)")
+                col1, col2 = st.columns([1, 2])
+                
+                with col1:
+                    st.metric("Your SDSD", f"{sdsd_val:.2f} ms")
+                
+                with col2:
+                    if sdsd_val < 20:
+                        status = "🔴 Low"
+                        color = "#ff4444"
+                    else:
+                        status = "🟢 Normal"
+                        color = "#44ff44"
+                    
+                    st.markdown(f"""
+                    <div style='padding: 15px; background-color: #1a1a1a; border-left: 5px solid {color}; border-radius: 5px;'>
+                        <p style='font-size: 16px; font-weight: bold; margin: 0;'>{status}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                st.markdown("""
+                **Reference Ranges:**
+                - **< 20 ms**: Low - Low short-term HRV
+                - **≥ 20 ms**: Normal - Typical for healthy individuals
+                
+                **Clinical Significance:**
+                - SDSD describes **short-term HRV fluctuations** → strongly influenced by parasympathetic activity
+                - **High SDSD** → Large variation between successive RR intervals → Flexible ANS, healthy body
+                - **Low SDSD** → Small/monotonous differences between successive RR intervals → Appears during stress, fatigue, disease
+                """)
+            
+            st.markdown("---")
+            
+            # Interpretation for HTI (Triangular Index)
+            hti_val = time_domain_features.get('HTI')
+            if hti_val is not None:
+                st.markdown("### HTI (HRV Triangular Index)")
+                col1, col2 = st.columns([1, 2])
+                
+                with col1:
+                    st.metric("Your HTI", f"{hti_val:.2f}")
+                
+                with col2:
+                    if hti_val < 15:
+                        status = "🔴 Low"
+                        color = "#ff4444"
+                    else:
+                        status = "🟢 Normal"
+                        color = "#44ff44"
+                    
+                    st.markdown(f"""
+                    <div style='padding: 15px; background-color: #1a1a1a; border-left: 5px solid {color}; border-radius: 5px;'>
+                        <p style='font-size: 16px; font-weight: bold; margin: 0;'>{status}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                st.markdown("""
+                **Reference Ranges:**
+                - **< 15**: Low - Narrow distribution, low variability
+                - **≥ 15**: Normal - Wide distribution, good variability
+                
+                **Interpretation:**
+                - HTI measures **width of NN interval distribution** in histogram
+                - **High HTI** → Wide distribution → High heart rate variability → Healthy ANS
+                - **Low HTI** → Narrow distribution → Low variability → May be related to stress/disease
+                """)
+            
+            st.markdown("---")
+            
+            # Interpretation for TINN
+            tinn_val = time_domain_features.get('TINN (ms)')
+            if tinn_val is not None:
+                st.markdown("### TINN (Triangular Interpolation of NN Interval Histogram)")
+                col1, col2 = st.columns([1, 2])
+                
+                with col1:
+                    st.metric("Your TINN", f"{tinn_val:.2f} ms")
+                
+                with col2:
+                    if tinn_val < 192:
+                        status = "🔴 Low"
+                        color = "#ff4444"
+                    else:
+                        status = "🟢 Normal"
+                        color = "#44ff44"
+                    
+                    st.markdown(f"""
+                    <div style='padding: 15px; background-color: #1a1a1a; border-left: 5px solid {color}; border-radius: 5px;'>
+                        <p style='font-size: 16px; font-weight: bold; margin: 0;'>{status}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                st.markdown("""
+                **Reference Ranges (based on stress research):**
+                - **Relaxed state**: 294.25 ± 93.86 ms (mean ± SD)
+                - **Stressed state**: 191.98 ± 47.13 ms (significantly lower)
+                - **< 192 ms**: Low - Indicates stress or reduced HRV
+                - **≥ 192 ms**: Normal - Typical for relaxed state
+                """)
+            
+            st.markdown("---")
+            
+            # Interpretation for Skewness
+            skew_val = time_domain_features.get('Skewness')
+            if skew_val is not None:
+                st.markdown("### Skewness (Kemencengan Distribusi)")
+                col1, col2 = st.columns([1, 2])
+                
+                with col1:
+                    st.metric("Your Skewness", f"{skew_val:.3f}")
+                
+                with col2:
+                    if skew_val > 0:
+                        status = "🔵 Positive Skew"
+                        color = "#4488ff"
+                    else:
+                        status = "🟠 Negative Skew"
+                        color = "#ff8844"
+                    
+                    st.markdown(f"""
+                    <div style='padding: 15px; background-color: #1a1a1a; border-left: 5px solid {color}; border-radius: 5px;'>
+                        <p style='font-size: 16px; font-weight: bold; margin: 0;'>{status}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                st.markdown("""
+                **Skewness Interpretation:**
+                - **Skewness > 0** (positive): Tail longer on right
+                  - More long NN intervals → Heart relatively slow
+                  - May indicate parasympathetic dominance
+                - **Skewness < 0** (negative): Tail longer on left
+                  - More short NN intervals → Heart relatively fast
+                  - May indicate sympathetic dominance, stress, or mild tachycardia
+                """)
+            
+            st.markdown("---")
         else:
             st.error("Gagal menghitung fitur Time Domain. Hanya 1 atau 0 puncak terdeteksi. Silakan sesuaikan parameter di halaman utama.")
 
