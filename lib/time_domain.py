@@ -91,12 +91,11 @@ def cvnn(nn_intervals):
     return np.std(nn_intervals, ddof=1) / np.mean(nn_intervals)
 
 def cvsd(nn_intervals):
-    """Coefficient of variation of successive differences"""
-    diff = np.diff(nn_intervals)
-    mean_diff = np.mean(np.abs(diff))
-    if mean_diff == 0:
+    """Coefficient of variation of successive differences: RMSSD / MeanNN"""
+    mean_nn = np.mean(nn_intervals)
+    if mean_nn == 0:
         return np.nan
-    return np.std(diff, ddof=1) / mean_diff
+    return rmssd(nn_intervals) / mean_nn
 
 def skewness(nn_intervals):
     """Skewness of NN interval distribution"""
