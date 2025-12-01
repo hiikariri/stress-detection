@@ -1283,219 +1283,68 @@ elif page.startswith("Frequency Domain Analysis"):
 elif page.startswith("Non-Linear Analysis"):
     st.markdown("---")
     st.header("Non-Linear Analysis")
-    st.info("Poincaré Plot (SD1 / SD2) and other non-linear features")
+    st.info("Poincaré Plot (SD1 / SD2) calculated using SDNN & RMSSD")
     st.markdown("---")
 
     if not uploaded_file:
         st.info("Upload a PPG CSV file to compute non-linear features.")
     else:
-        # Detect peaks (use the same parameters from the main page controls)
+        # 1. Pastikan Peak Detection berjalan (mengambil setting dari session state atau default)
         ph = st.session_state.get('peak_height', 0.5)
-        pdist = st.session_state.get('peak_distance', 5)
+        pdist = st.session_state.get('peak_distance', 20) 
         pprom = st.session_state.get('peak_prominence', 0.5)
-        try:
-            pdist_int = int(pdist)
-        except Exception:
-            pdist_int = 5
-        peak_indices = bmepy.detect_peaks(filtered_signal, height=ph, distance=pdist_int, prominence=pprom)
+        
+        # Deteksi ulang agar variabel 'pi_intervals' pasti tersedia
+        peak_indices = bmepy.detect_peaks(filtered_signal, height=ph, distance=int(pdist), prominence=pprom)
 
         if len(peak_indices) > 1:
-            pi_intervals = np.diff(time[peak_indices])
+            pi_intervals = np.diff(time[peak_indices]) # Ini dalam satuan detik (seconds)
             
-            # Convert to ms for Poincaré analysis using library function
+            # 2. Hitung Fitur Time Domain (SDNN & RMSSD) DULU di sini
+            #    Kita panggil library time_domain (bmetm)
+            time_features = bmetm.compute_time_domain_features(pi_intervals)
+            
+            # Ambil nilainya (pastikan key sesuai dengan output library time_domain.py)
+            # Biasanya library Anda outputnya: 'SDNN (ms)', 'RMSSD (ms)'
+            val_sdnn = time_features.get('SDNN (ms)')
+            val_rmssd = time_features.get('RMSSD (ms)')
+            
+            # 3. Konversi interval ke ms untuk plotting
             rr_ms = poincare.convert_intervals_to_ms(pi_intervals, unit='seconds')
 
-            if len(rr_ms) < 2:
-                st.write("Not enough RR intervals to compute Poincaré metrics.")
-            else:
-                # Compute Poincaré metrics using library
-                poincare_metrics = poincare.compute_poincare_features(rr_ms)
-                
-                SD1 = poincare_metrics['SD1']
-                SD2 = poincare_metrics['SD2']
-                SD_ratio = poincare_metrics['SD1_SD2_ratio']
+            # 4. Panggil Plot Poincaré dengan melempar nilai SDNN & RMSSD tadi
+            fig, ax, metrics = poincare.plot_poincare(
+                rr_ms, 
+                title='Poincaré Plot',
+                external_sdnn=val_sdnn,    # <--- Kirim nilai SDNN
+                external_rmssd=val_rmssd   # <--- Kirim nilai RMSSD
+            )
+    
+            st.pyplot(fig)
 
-                # Store in session state under non-linear category
-                nl = {
-                    'poincare_SD1 (ms)': round(SD1, 4) if SD1 is not None else None,
-                    'poincare_SD2 (ms)': round(SD2, 4) if SD2 is not None else None,
-                    'poincare_SD1/SD2_ratio': round(SD_ratio, 4) if SD_ratio is not None else None
-                }
-                ppg_features['non_linear'] = nl
+            # --- Tampilkan Hasil ---
+            SD1 = metrics['SD1']
+            SD2 = metrics['SD2']
+            SD_ratio = metrics['SD1_SD2_ratio']
+            
+            # Simpan ke session state agar bisa di-export
+            nl = {
+                'poincare_SD1 (ms)': (SD1, 4) if SD1 else None,
+                'poincare_SD2 (ms)': (SD2, 4) if SD2 else None,
+                'poincare_SD1/SD2_ratio': (SD_ratio, 4) if SD_ratio else None
+            }
+            ppg_features['non_linear'] = nl
 
-                st.subheader("Poincaré Analysis Summary")
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    st.metric(
-                        label="SD1 (Short-term HRV)",
-                        value=f"{SD1:.2f} ms" if SD1 is not None else "N/A",
-                        help="Standard deviation perpendicular to identity line. Reflects parasympathetic (vagal) activity."
-                    )
-                
-                with col2:
-                    st.metric(
-                        label="SD2 (Long-term HRV)",
-                        value=f"{SD2:.2f} ms" if SD2 is not None else "N/A",
-                        help="Standard deviation along identity line. Reflects overall HRV (sympathetic + parasympathetic)."
-                    )
-                
-                with col3:
-                    st.metric(
-                        label="SD1/SD2 Ratio",
-                        value=f"{SD_ratio:.3f}" if SD_ratio is not None else "N/A",
-                        help="Ratio indicates balance between short-term and long-term variability."
-                    )
-                
-                st.markdown("---")
-                if SD_ratio is not None:
-                    interpretation = poincare.interpret_poincare_ratio(SD_ratio)
-                    if SD_ratio < 0.3:
-                        color = "🔴"
-                        status = "Stres Tinggi / Dominasi Simpatik"
-                    elif SD_ratio < 0.5:
-                        color = "🟠"
-                        status = "Stres Sedang / Aktivitas Simpatik"
-                    elif SD_ratio < 1.0:
-                        color = "🟢"
-                        status = "Aktivitas Otonom Seimbang"
-                    elif SD_ratio < 1.5:
-                        color = "🔵"
-                        status = "Dominasi Parasimpatik"
-                    else:
-                        color = "🟣"
-                        status = "Aktivitas Parasimpatik Kuat"
-                    
-                    st.markdown(f"""
-                    <div style='padding: 20px; background-color: #13263b; border-radius: 10px; border-left: 5px solid #4CAF50;'>
-                        <h3 style='margin-top: 0;'>{color} Autonomic Balance Status</h3>
-                        <p style='font-size: 18px; font-weight: bold; color: #d11e15;'>{status}</p>
-                        <p style='font-size: 14px; line-height: 1.6;'>{interpretation}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    st.markdown("---")
-                    
-                    with st.expander("📖 Penjelasan Detail Metrik Poincaré", expanded=False):
-                        st.markdown(f"""
-                        ### Statistik Interval RR
-                        - **Total Interval RR**: {len(rr_ms)} interval
-                        - **Rata-rata Interval RR**: {np.mean(rr_ms):.2f} ms ({60000/np.mean(rr_ms):.1f} bpm)
-                        - **Standar Deviasi Interval RR**: {np.std(rr_ms):.2f} ms
-                        - **Interval RR Minimum**: {np.min(rr_ms):.2f} ms
-                        - **Interval RR Maksimum**: {np.max(rr_ms):.2f} ms
-                        - **Rentang**: {np.max(rr_ms) - np.min(rr_ms):.2f} ms
-                        
-                        ---
-                        
-                        ### Metrik Poincaré Plot
-                        
-                        **SD1 (Variabilitas Jangka Pendek)**: {SD1:.2f} ms
-                        - Merepresentasikan **variabilitas beat-to-beat** (antar detak)
-                        - Mencerminkan aktivitas sistem saraf **parasimpatik** (vagal)
-                        - SD1 Tinggi → Aktivitas parasimpatik lebih tinggi → Stres lebih rendah
-                        - SD1 Rendah → Tonus vagal berkurang → Stres/kelelahan lebih tinggi
-                        
-                        **SD2 (Variabilitas Jangka Panjang)**: {SD2:.2f} ms
-                        - Merepresentasikan **variabilitas interval RR secara keseluruhan**
-                        - Mencerminkan aktivitas simpatik dan parasimpatik
-                        - Menunjukkan fluktuasi detak jantung jangka panjang
-                        
-                        **Rasio SD1/SD2**: {SD_ratio:.3f}
-                        - **< 0.3**: Aktivitas simpatik sangat tinggi (stres tinggi)
-                        - **0.3 - 0.5**: Dominasi simpatik (stres sedang)
-                        - **0.5 - 1.0**: Fungsi otonom seimbang (sehat)
-                        - **1.0 - 1.5**: Dominasi parasimpatik (kondisi rileks)
-                        - **> 1.5**: Aktivitas parasimpatik sangat tinggi (sangat rileks)
-                        
-                        ---
-                        
-                        ### Signifikansi Klinis
-                        
-                        - **Individu sehat**: Umumnya memiliki rasio SD1/SD2 antara 0.5 - 1.0
-                        - **Stres/Kecemasan**: Sering menunjukkan rasio < 0.5 (SD1 berkurang)
-                        - **Atlet/Kondisi rileks**: Dapat menunjukkan rasio > 1.0 (tonus vagal tinggi)
-                        - **Penyakit kardiovaskular**: Sering menunjukkan SD1 dan SD2 yang berkurang
-                        
-                        ---
-                        
-                        ### Referensi
-                        - Brennan, M., et al. (2001). "Do existing measures of Poincaré plot geometry reflect nonlinear features of heart rate variability?" *IEEE Trans Biomed Eng*, 48(11), 1342-1347.
-                        - Karmakar, C. K., et al. (2009). "Complex correlation measure: a novel descriptor for Poincaré plot." *Biomed Eng Online*, 8, 17.
-                        """)
+            # Tampilkan metrik di layar
+            col1, col2, col3 = st.columns(3)
+            col1.metric("SD1 (Short-term)", f"{SD1:.2f} ms" if SD1 else "N/A")
+            col2.metric("SD2 (Long-term)", f"{SD2:.2f} ms" if SD2 else "N/A")
+            col3.metric("SD1/SD2 Ratio", f"{SD_ratio:.3f}" if SD_ratio else "N/A")
+            
+            st.write(f"**Note:** SD1 derived from RMSSD ({val_rmssd:.2f} ms), SD2 derived from SDNN ({val_sdnn:.2f} ms).")
 
-                    st.markdown("---")
-                    export_data = {
-                        "Metrik": [
-                            "Total Interval RR",
-                            "Rata-rata RR (ms)",
-                            "Rata-rata HR (bpm)",
-                            "Std RR (ms)",
-                            "Min RR (ms)",
-                            "Maks RR (ms)",
-                            "Rentang (ms)",
-                            "SD1 (ms)",
-                            "SD2 (ms)",
-                            "Rasio SD1/SD2",
-                            "Status Otonom"
-                        ],
-                        "Nilai": [
-                            len(rr_ms),
-                            f"{np.mean(rr_ms):.2f}",
-                            f"{60000/np.mean(rr_ms):.1f}",
-                            f"{np.std(rr_ms):.2f}",
-                            f"{np.min(rr_ms):.2f}",
-                            f"{np.max(rr_ms):.2f}",
-                            f"{np.max(rr_ms) - np.min(rr_ms):.2f}",
-                            f"{SD1:.2f}",
-                            f"{SD2:.2f}",
-                            f"{SD_ratio:.3f}",
-                            status
-                        ]
-                    }
-                    
-                    export_df = pd.DataFrame(export_data)
-                    
-                    col1, col2 = st.columns([1, 3])
-                    with col1:
-                        csv = export_df.to_csv(index=False)
-                        st.download_button(
-                            label="📥 Download Analysis (CSV)",
-                            data=csv,
-                            file_name=f"poincare_analysis_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                            mime="text/csv"
-                        )
-
-                st.markdown("---")
-                st.subheader("Poincaré Plot Visualization")
-                
-                try:
-                    fig, ax, metrics = poincare.plot_poincare(
-                        rr_ms, 
-                        title='Poincaré Plot (SD1/SD2 Analysis)',
-                        show_ellipse=True,
-                        figsize=(8, 8),
-                        margin_factor=0.05,        # 5% margin (lebih ketat)
-                        use_percentile=True,       # Gunakan percentile untuk ignore outlier
-                        percentile_range=(2, 1)    # Fokus ke 96% data di tengah
-                    )
-                    st.pyplot(fig)
-                except Exception as e:
-                    st.error(f"Error creating Poincaré plot: {str(e)}")
-
-                st.markdown("---")
-                st.subheader("Extracted Poincaré / Non-Linear Features")
-                # Only show non-linear (Poincaré) features on this page
-                nl = ppg_features.get('non_linear') if isinstance(ppg_features, dict) else None
-                if not nl:
-                    st.info("No non-linear features available. Run Poincaré analysis above.")
-                else:
-                    nl_df = pd.DataFrame.from_dict(nl, orient='index', columns=['Value'])
-                    nl_df = nl_df.reset_index()
-                    nl_df.columns = ['Feature', 'Value']
-                    st.dataframe(nl_df, use_container_width=True)
         else:
-            st.write("Not enough detected beats to compute Poincaré plot (need at least 2 peaks).")
+            st.warning("Not enough peaks detected. Try adjusting peak parameters in the sidebar/main page.")
 
 elif page.startswith("All Features & Export"):
     st.markdown("---")
