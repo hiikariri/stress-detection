@@ -63,7 +63,7 @@ def hti(nn_intervals, bin_size=0.0078125):
 def tinn(nn_intervals, bin_size=0.0078125):
     """The baseline width of the triangle that best approximates the NN interval histogram using least-squares fitting"""
     # Histogram
-    hist, bin_edges = np.histogram(nn_intervals, bins=np.arange(np.min(nn_intervals), np.max(nn_intervals)+bin_size, bin_size))
+    hist, bin_edges = np.histogram(nn_intervals, bins='auto')
     x = (bin_edges[:-1] + bin_edges[1:]) / 2
 
     # Peak
