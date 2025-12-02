@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.stats import skew
 
+# All functions expect nn_intervals in seconds
 def sdnn(nn_intervals):
     """Standard deviation of NN intervals"""
     return np.std(nn_intervals, ddof=1)
@@ -50,41 +51,56 @@ def mean_hr(nn_intervals):
         return np.nan
     return 60.0 / mean_nn
 
-def hti(nn_intervals, bin_size=0.01):
-    """HRV Triangular Index: total number of NN intervals divided by the height of the histogram of NN intervals"""
-    counts, _ = np.histogram(nn_intervals, bins=np.arange(np.min(nn_intervals), np.max(nn_intervals)+bin_size, bin_size))
+def hti(nn_intervals, bin_size=0.0078125):
+    """The total number of NN intervals divided by the height of the NN interval histogram constructed with a fixed bin width."""
+    min_val = np.min(nn_intervals)
+    max_val = np.max(nn_intervals)
+    bins = np.arange(min_val, max_val + bin_size, bin_size)
+
+    counts, _ = np.histogram(nn_intervals, bins=bins)
     return len(nn_intervals) / np.max(counts)
 
-def tinn(nn_intervals, bin_size=0.01):
-    """TINN: Triangular interpolation of NN interval histogram (HRV Task Force standard)"""
-    # Create histogram
-    counts, bin_edges = np.histogram(nn_intervals, bins=np.arange(np.min(nn_intervals), np.max(nn_intervals)+bin_size, bin_size))
-    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-    
-    # Find mode (peak)
-    max_idx = np.argmax(counts)
-    mode = bin_centers[max_idx]
-    max_count = counts[max_idx]
-    
-    # Find left intercept (N): where line from peak to left edge crosses X-axis
-    # Linear interpolation from peak going left
-    left_idx = 0
-    for i in range(max_idx, 0, -1):
-        if counts[i] == 0 or i == 0:
-            left_idx = i
-            break
-    
-    # Find right intercept (M): where line from peak to right edge crosses X-axis
-    right_idx = len(counts) - 1
-    for i in range(max_idx, len(counts)):
-        if counts[i] == 0 or i == len(counts) - 1:
-            right_idx = i
-            break
-    
-    # TINN = M - N (baseline width of the triangle)
-    tinn_value = bin_centers[right_idx] - bin_centers[left_idx]
-    
-    return tinn_value
+def tinn(nn_intervals, bin_size=0.0078125):
+    """The baseline width of the triangle that best approximates the NN interval histogram using least-squares fitting"""
+    # Histogram
+    hist, bin_edges = np.histogram(nn_intervals, bins=np.arange(np.min(nn_intervals), np.max(nn_intervals)+bin_size, bin_size))
+    x = (bin_edges[:-1] + bin_edges[1:]) / 2
+
+    # Peak
+    m_idx = np.argmax(hist)
+    Xm = x[m_idx]
+    Hm = hist[m_idx]
+
+    best_error = np.inf
+    best_N = None
+    best_M = None
+
+    # Try all N < Xm and M > Xm combinations
+    for i in range(0, m_idx):
+        for j in range(m_idx + 1, len(x)):
+            N = x[i]
+            M = x[j]
+
+            # Build triangular model
+            T = np.zeros_like(hist)
+
+            # Increasing line from N to Xm
+            left_mask = (x >= N) & (x <= Xm)
+            T[left_mask] = Hm * (x[left_mask] - N) / (Xm - N)
+
+            # Decreasing line from Xm to M
+            right_mask = (x >= Xm) & (x <= M)
+            T[right_mask] = Hm * (M - x[right_mask]) / (M - Xm)
+
+            # Compute error
+            error = np.sum((hist - T) ** 2)
+
+            if error < best_error:
+                best_error = error
+                best_N = N
+                best_M = M
+
+    return best_M - best_N
 
 def cvnn(nn_intervals):
     """Coefficient of variation of NN intervals"""
@@ -101,7 +117,7 @@ def skewness(nn_intervals):
     """Skewness of NN interval distribution"""
     return skew(nn_intervals)
 
-# Convenience function to compute all features
+# Compute all features and return as a dictionary, units in ms where applicable
 def compute_time_domain_features(nn_intervals):
     return {
         'SDNN (ms)': sdnn(nn_intervals) * 1000,  # Convert to ms
@@ -113,7 +129,7 @@ def compute_time_domain_features(nn_intervals):
         'pNN50 (%)': pnn50(nn_intervals),
         'HR (bpm)': mean_hr(nn_intervals),
         'HTI': hti(nn_intervals, bin_size=(1/128)),
-        'TINN (ms)': tinn(nn_intervals) * 1000,
+        'TINN (ms)': tinn(nn_intervals, bin_size=(1/128)) * 1000,
         'CVNN': cvnn(nn_intervals),
         'CVSD': cvsd(nn_intervals),
         'Skewness': skewness(nn_intervals)

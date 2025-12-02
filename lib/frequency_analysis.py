@@ -40,7 +40,7 @@ def _calculate_welch_manual_scipy_scaled(signal_ms, fs_rr):
     if x.size == 0:
         return np.array([]), np.array([])
 
-    nperseg = 256
+    nperseg = 200
     noverlap = 128
     nfft = 256
 
